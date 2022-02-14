@@ -224,39 +224,6 @@ class Hardware:
             v = kwargs['value']
             self.lib.setStimDuration(self.controller, kwargs['channel'], float(v))
 
-    def start_livefeed(self, lf_frame):
-        # live feed flags are [produced_image, stop_livefeed]
-        # scheme is producer-consumer relationship between python threads
-        self.livefeed_flags = np.zeros(2, dtype=np.bool)
-        self.clear_livefeed_produced_image_flag()
-        self.set_livefeed_stop_loop_flag(False)
-        if not self.hardware_enabled:
-            print("Hardware not enabled (analysis-only mode).")
-            return False
-        orig_shape = lf_frame.shape
-        lf_frame = lf_frame.reshape(-1)
-        self.lib.startLiveFeed(self.controller, lf_frame, self.livefeed_flags)
-        lf_frame = lf_frame.reshape(orig_shape)
-        return True
-
-    def continue_livefeed(self):
-        if not self.hardware_enabled:
-            print("Hardware not enabled (analysis-only mode).")
-            return
-        self.lib.continueLiveFeed(self.controller)
-
-    def stop_livefeed(self):
-        if not self.hardware_enabled:
-            print("Hardware not enabled (analysis-only mode).")
-            return
-        self.set_livefeed_stop_loop_flag()
-        timeout = 5.0
-        while self.get_livefeed_stop_loop_flag() and timeout > 0:
-            time.sleep(1)
-            timeout -= 1
-            print("waiting for acqui daemon to read stop-loop flag...", timeout)
-        self.livefeed_flags = None
-
     def define_c_types(self):
         if not self.hardware_enabled:
             print("Hardware not enabled (analysis-only mode).")

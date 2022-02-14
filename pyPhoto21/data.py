@@ -1,16 +1,10 @@
-import time
-import threading
 
 import numpy as np
-from matplotlib.path import Path
 
-from pyPhoto21.analysis.core import AnalysisCore
-from pyPhoto21.viewers.trace import Trace
 from pyPhoto21.database.database import Database
 from pyPhoto21.database.file import File
 from pyPhoto21.database.legacy import LegacyData
 from pyPhoto21.database.metadata import Metadata
-from pyPhoto21.analysis.process import Processor
 
 
 # This class will supersede Data...
@@ -22,10 +16,8 @@ class Data(File):
         # interaction with other modules. It is the Data class' responsibility to sync all these.
         self.hardware = hardware
         self.db = Database()
-        self.core = AnalysisCore(self.db.meta)
         self.gui = None
 
-        self.full_data_processor = Processor(self)
         super().__init__(self.db.meta)
 
         # Internal (non-user facing) settings and flags
@@ -56,45 +48,12 @@ class Data(File):
         # Init actions
         self.sync_from_metadata()
 
-        # If enabled, start data processor listening for jobs in background
-        if self.full_data_processor.enabled:
-            threading.Thread(target=self.full_data_processor.process_continually,
-                             args=(),
-                             daemon=True).start()
-
     def sync_from_metadata(self, suppress_allocate=False):
         if self.get_is_trial_averaging_enabled():
             self.set_current_trial_index(None)
         self.sync_hardware_from_metadata()
-        self.sync_analysis_from_metadata()
         if not suppress_allocate:
             self.allocate_image_memory()
-
-    def is_processed_data_up_to_date(self):
-        return not self.full_data_processor.get_is_data_up_to_date()
-
-    def stop_background_processing(self):
-        self.full_data_processor.stop_processor()
-
-    # blocks until processor daemon has stopped
-    def acquire_processing_lock(self):
-        if not self.full_data_processor.enabled:
-            return
-        # don't need atomic operations -- this will be called from main thread,
-        # which is the only thread that should be queuing processing tasks.
-        self.full_data_processor.pause_processor()
-        while self.full_data_processor.get_is_active():
-            time.sleep(0.5)
-
-    def drop_processing_lock(self):
-        if not self.full_data_processor.enabled:
-            return
-        self.full_data_processor.unpause_processor()
-
-    def sync_analysis_from_metadata(self):
-        if not self.full_data_processor.enabled:
-            return
-        self.full_data_processor.update_full_processed_data()
 
     # numpy autosaves the image arrays; only need to save meta actively
     def save_metadata_to_json(self):
@@ -147,7 +106,6 @@ class Data(File):
         """ Given a Metadata class instance, replace in current settings
             The GUI will update itself after the call to here returns """
         self.db.meta = meta
-        self.core.meta = meta
         self.meta = meta
         self.sync_from_metadata(suppress_allocate=suppress_resize)
         if not suppress_resize:
@@ -279,7 +237,6 @@ class Data(File):
         self.db.open_filename = None
         self.load_current_metadata_file()
         self.db.load_mmap_file(mode=None)
-        self.full_data_processor.update_full_processed_data()
 
     def increment_location(self, num=1):
         self.save_metadata_to_json()
@@ -289,7 +246,6 @@ class Data(File):
         self.db.open_filename = None
         self.load_current_metadata_file()
         self.db.load_mmap_file(mode=None)
-        self.full_data_processor.update_full_processed_data()
 
     def increment_record(self, num=1, suppress_file_create=False):
         self.save_metadata_to_json()
@@ -299,7 +255,6 @@ class Data(File):
         if not suppress_file_create:
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
 
     # includes paths
     def find_existing_file_pair(self, direction=1):
@@ -353,7 +308,6 @@ class Data(File):
         if meta_obj is not None:
             self.set_meta(meta_obj, suppress_resize=True)
             self.db.load_mmap_file(mode='r+', filename=data_file)
-            self.full_data_processor.update_full_processed_data()
 
     def increment_file(self):
         self.auto_change_file(direction=1)
@@ -369,7 +323,6 @@ class Data(File):
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
         else:
             self.db.meta.current_slice = 0
             if num > 1:
@@ -378,7 +331,6 @@ class Data(File):
                 self.db.open_filename = None
                 self.load_current_metadata_file()
                 self.db.load_mmap_file(mode=None)
-                self.full_data_processor.update_full_processed_data()
 
     def decrement_location(self, num=1):
         self.save_metadata_to_json()
@@ -389,14 +341,12 @@ class Data(File):
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
         else:
             self.db.meta.current_location = 0
             if num > 1:
                 self.db.open_filename = None
                 self.load_current_metadata_file()
                 self.db.load_mmap_file(mode=None)
-                self.full_data_processor.update_full_processed_data()
 
     def decrement_record(self, num=1):
         self.save_metadata_to_json()
@@ -405,14 +355,12 @@ class Data(File):
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
         else:
             self.db.meta.current_record = 0
             if num > 1:
                 self.db.open_filename = None
                 self.load_current_metadata_file()
                 self.db.load_mmap_file(mode=None)
-                self.full_data_processor.update_full_processed_data()
 
     def set_slice(self, v):
         self.save_metadata_to_json()
@@ -421,13 +369,11 @@ class Data(File):
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
         elif v < self.db.meta.current_slice:
             self.decrement_slice(self.db.meta.current_slice - v)
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
 
     def set_record(self, v):
         self.save_metadata_to_json()
@@ -436,13 +382,11 @@ class Data(File):
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
         elif v < self.db.meta.current_record:
             self.decrement_record(self.db.meta.current_record - v)
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
 
     def set_location(self, v):
         self.save_metadata_to_json()
@@ -451,13 +395,11 @@ class Data(File):
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
         if v < self.db.meta.current_location:
             self.decrement_location(self.db.meta.current_location - v)
             self.db.open_filename = None
             self.load_current_metadata_file()
             self.db.load_mmap_file(mode=None)
-            self.full_data_processor.update_full_processed_data()
 
     # This is the allocated memory size, not necessarily the current camera state
     # However, the Hardware class should be prepared to init camera to this width
@@ -493,27 +435,12 @@ class Data(File):
             self.db.meta.height = self.get_display_height()
             self.meta.int_pts = self.get_int_pts()  # syncs from hardware
             self.increment_record_until_filename_free()
-        if not suppress_processing:
-            self.full_data_processor.update_full_processed_data()
 
     def get_camera_program(self):
         cam_prog = self.hardware.get_camera_program()
         if self.get_is_loaded_from_file() or cam_prog is None:
             return self.db.meta.camera_program
         return cam_prog
-
-    def set_measure_window(self, kind, index, value, suppress_processing=False):
-        if index is None:
-            self.db.meta.measure_window = value
-        elif index == 0 or index == 1:
-            self.db.meta.measure_window[index] = value
-        if not suppress_processing:
-            self.full_data_processor.update_full_processed_data()
-
-    def get_measure_window(self, index=None):
-        if index is None:
-            return self.db.meta.measure_window
-        return self.db.meta.measure_window[index]
 
     def get_num_pts(self):
         num_pts = self.hardware.get_num_pts()
@@ -525,20 +452,6 @@ class Data(File):
         if self.get_is_loaded_from_file():
             return self.db.meta.num_pulses[ch - 1]
         return self.hardware.get_num_pulses(channel=ch)
-
-    # The purpose of this linspace is to
-    # allow us to remove trace points without
-    # losing track of the absolute frame number w.r.t
-    # the stim time, etc
-    def get_cropped_linspace(self, start_frames=None, end_frames=None):
-        if start_frames is None or end_frames is None:
-            start_frames, end_frames = self.get_artifact_exclusion_window()
-        if end_frames < 0:
-            end_frames = self.get_num_pts()
-        int_pts = self.get_int_pts()
-        return np.linspace(start_frames * int_pts,
-                           end_frames * int_pts,
-                           end_frames - start_frames)
 
     # We allocate twice the memory since C++ needs room for CDS subtraction
     def allocate_image_memory(self):
@@ -614,217 +527,6 @@ class Data(File):
             ret_frame = np.average(images, axis=0) / std
         return ret_frame
 
-    # Based on system state, create/get the frame that should be displayed.
-    # index can be an integer or a list of [start:end] over which to average
-    def get_display_frame(self, index=None, get_rli=False, binning=1):
-        if self.get_is_livefeed_enabled():
-            return self.get_livefeed_frame()[0, :, :]
-        if self.core.get_show_processed_data():
-            return self.core.get_processed_display_frame()
-        images = None
-        using_preprocessed = False
-        if get_rli:
-            images = self.calculate_rli()
-            return images
-        else:
-            # fetching data
-            if self.full_data_processor.enabled and self.full_data_processor.get_is_data_up_to_date():
-                using_preprocessed = True
-                self.acquire_processing_lock()
-                images = self.get_processed_images()
-            else:
-                images = self.get_acqui_images()
-        if images is None:
-            return None
-        if len(images.shape) != 3:
-            print("Issue in data.py: get display frame image shape:", images.shape)
-            return None
-
-        # Temporal selection index: a single time index or a time window
-        ret_frame = None
-        # Apply measure window if applicable
-        bg_name = self.get_background_options()[self.get_background_option_index()]
-        if index is None or not self.bg_uses_frame_selector(bg_name):
-            index = self.get_measure_window()
-        if type(index) == int and (index < images.shape[0]) and index >= 0:
-            ret_frame = images[index, :, :]
-        elif type(index) == list and len(index) == 2:
-            ret_frame = self.apply_temporal_aggregration_frame(images[index[0]:index[1], :, :])
-        else:
-            ret_frame = self.apply_temporal_aggregration_frame(images)
-
-        if self.full_data_processor.enabled and using_preprocessed:  # can skip the minimal processing.
-            self.drop_processing_lock()
-            print("Showing frame from fully processed data.")
-            return ret_frame
-
-        if ret_frame is None or ret_frame.size < 1:
-            return None
-
-        # RLI division
-        if self.get_is_rli_division_enabled():
-            rli = self.calculate_rli()
-            if rli is not None and rli.shape == ret_frame.shape:
-                ret_frame = ret_frame.astype(np.float32) / rli
-                ret_frame = np.nan_to_num(ret_frame)
-            elif rli.shape != ret_frame.shape:
-                print("RLI and data shapes don't match:",
-                      rli.shape,
-                      ret_frame.shape,
-                      "Skipping RLI division.")
-
-        # digital binning
-        ret_frame = self.core.create_binned_data(ret_frame, binning_factor=binning)
-
-        # spatial filtering
-        ret_frame = self.core.filter_spatial(ret_frame)
-
-        if ret_frame is None or ret_frame.size < 1:
-            return None
-
-        # crop out 1px borders
-        ret_frame = ret_frame
-        return ret_frame
-
-    def get_display_fp_trace(self, fp_index):
-        trial = self.get_current_trial_index()
-        traces = self.get_fp_data()
-        if trial is None:
-            traces = np.average(traces, axis=0)
-        start, end = self.get_artifact_exclusion_window()
-        return Trace(traces[:, fp_index],
-                     self.get_int_pts(),
-                     fp_index=fp_index,
-                     is_fp_trace=True,
-                     start_frame=start,
-                     end_frame=end)
-
-    @staticmethod
-    def get_frame_mask(h, w, index=None):
-        """ Return a frame mask given a polygon """
-        if index is None or type(index) != np.ndarray or index.shape[0] == 1:
-            return None
-        x, y = np.meshgrid(np.arange(w), np.arange(h))  # make a canvas with coordinates
-        x, y = x.flatten(), y.flatten()
-        points = np.vstack((x, y)).T
-
-        p = Path(index, closed=False)
-        mask = p.contains_points(points).reshape(h, w)  # mask of filled in path
-
-        mask_where = np.where(mask)
-        if np.size(mask_where) < 1:
-            print("frame mask: filled shape is empty:", index, mask_where)
-            return mask
-        return mask
-
-    # returns a Trace object representing trace
-    # when mask is not None, it overrides the index argument.
-    # Index is a pixel specifier argument.
-    # fp_index is the integer corresponding to the FP trace index
-    def get_display_trace(self, index=None, fp_index=None, zoom_factor=1.0, masks=None):
-        if fp_index is not None:
-            tr = self.get_display_fp_trace(fp_index)
-            tr.normalize(zoom_factor=zoom_factor)
-            return tr
-
-        images = self.get_acqui_images()
-        if images is None:
-            print("get_display_trace: No images to display.")
-            return None
-
-        ret_trace = None
-        master_mask = None
-        mask = None
-        if masks is not None and len(masks) > 0:
-            master_mask = masks[0]
-            for m in masks[1:]:
-                if m.shape != master_mask.shape:
-                    return None  # image must have changed, region no longer valid.
-                master_mask = np.logical_or(master_mask, m)
-            try:
-                ret_trace = images[:, master_mask]
-            except IndexError:
-                return None
-            if ret_trace.size < 1:
-                return None
-            ret_trace = np.average(ret_trace, axis=1)
-        elif index is None:
-            return ret_trace
-        elif type(index) == np.ndarray:
-            if index.shape[0] == 1:
-                if index[0, 1] >= images.shape[1]:
-                    return None  # image must have changed, pixel no longer valid.
-                if index[0, 0] >= images.shape[2]:
-                    return None  # image must have changed, pixel no longer valid.
-                ret_trace = images[:, index[0, 1], index[0, 0]]
-            elif np.size(index) > 0:
-                _, h, w = images.shape
-                mask = self.get_frame_mask(h, w, index=index)
-                try:
-                    ret_trace = images[:, mask]
-                except IndexError as e:
-                    return None
-                if ret_trace.size < 1:
-                    return None
-                ret_trace = np.average(ret_trace, axis=1)
-            else:
-                print("get_display_trace: drawn shape is empty:", index)
-
-        if ret_trace is None or ret_trace.size < 1:
-            return None
-
-        start, end = self.get_artifact_exclusion_window()
-        if masks is None and mask is not None:
-            masks = [mask]
-            master_mask = mask
-        ret_trace = Trace(ret_trace,
-                          self.get_int_pts(),
-                          start_frame=start,
-                          end_frame=end,
-                          pixel_indices=index,
-                          fp_index=fp_index,
-                          masks=masks,
-                          master_mask=master_mask)
-
-        # data inversing (BEFORE baseline correction)
-        if self.get_is_data_inverse_enabled():
-            ret_trace.apply_inverse()
-
-        # baseline correction
-        fit_type = self.core.get_baseline_correction_options()[self.core.get_baseline_correction_type_index()]
-        skip_window = self.core.get_baseline_skip_window()
-        ret_trace.baseline_correct_noise(fit_type, skip_window)
-
-        # temporal filtering
-        if self.core.get_is_temporal_filter_enabled():
-            filter_type = self.core.get_temporal_filter_options()[self.core.get_temporal_filter_index()]
-            sigma_t = self.core.get_temporal_filter_radius()
-            if self.validate_filter_size(filter_type, sigma_t):
-                ret_trace.filter_temporal(filter_type, sigma_t)  # applies time cropping if needed
-
-        # normalize
-        ret_trace.normalize(zoom_factor=zoom_factor)
-
-        return ret_trace
-
-    # Return true if filter size is not too big
-    def validate_filter_size(self, filter_type, sigma_t):
-        n = self.get_num_pts()
-        m = None
-        if filter_type == 'Low Pass':  # i.e. Moving Average
-            m = int(sigma_t)
-        elif filter_type.startswith('Binomial-'):
-            m = int(filter_type[-1]) + 1
-        else:
-            return True
-        return n - m > m
-
-    def get_fp_data(self):
-        trial = self.get_current_trial_index()
-        if trial is None:
-            return self.db.load_fp_data()
-        return self.db.load_trial_fp_data(trial)
-
     def get_acqui_images(self):
         trial = self.get_current_trial_index()
         if trial is None:
@@ -868,8 +570,6 @@ class Data(File):
             self.increment_record_until_filename_free()
         self.hardware.set_num_pts(value=value)
         self.meta.num_pts = value
-        if not suppress_processing:
-            self.full_data_processor.update_full_processed_data()
 
     # Populate meta.rli_high from RLI raw frames
     def calculate_light_rli_frame(self, margins=40, force_recalculate=False):
@@ -981,12 +681,6 @@ class Data(File):
             self.gui.unfreeze_hardware_settings()
         self.is_loaded_from_file = value
 
-    def get_is_analysis_only_mode_enabled(self):
-        return self.db.meta.is_analysis_only_mode_enabled
-
-    def set_is_analysis_only_mode_enabled(self, value):
-        self.db.meta.is_analysis_only_mode_enabled = value
-
     def get_is_schedule_rli_enabled(self):
         return self.db.meta.is_schedule_rli_enabled
 
@@ -1059,63 +753,3 @@ class Data(File):
         if self.current_trial_index is None:
             self.current_trial_index = 0
         self.current_trial_index = max(self.current_trial_index - 1, 0)
-
-    def get_is_rli_division_enabled(self):
-        return self.db.meta.is_rli_division_enabled
-
-    def set_is_rli_division_enabled(self, v, suppress_processing=False):
-        self.db.meta.is_rli_division_enabled = v
-        if not suppress_processing:
-            self.full_data_processor.update_full_processed_data()
-
-    def get_is_data_inverse_enabled(self):
-        return self.db.meta.is_data_inverse_enabled
-
-    def set_is_data_inverse_enabled(self, v, suppress_processing=False):
-        self.db.meta.is_data_inverse_enabled = v
-        if not suppress_processing:
-            self.full_data_processor.update_full_processed_data()
-
-    def get_is_livefeed_enabled(self):
-        return self.is_live_feed_enabled
-
-    def set_is_livefeed_enabled(self, v):
-        self.is_live_feed_enabled = v
-
-    def get_display_value_option_index(self):
-        return self.db.meta.display_value_option_index
-
-    def set_display_value_option_index(self, v):
-        self.db.meta.display_value_option_index = v
-
-    def get_livefeed_frame(self):
-        if self.get_is_livefeed_enabled():
-            if self.livefeed_frame is not None:
-                return self.livefeed_frame
-            else:
-                w = self.get_display_width()
-                h = self.get_display_height()
-                self.livefeed_frame = np.zeros((4, h, w), dtype=np.uint16)
-                return self.livefeed_frame
-
-    def clear_livefeed_frame(self):
-        self.livefeed_frame = None
-
-    def set_notepad_text(self, **kwargs):
-        v = kwargs['values']
-        self.meta.notepad_text = v
-
-    def get_contrast_scaling(self):
-        return self.meta.contrast_scaling
-
-    def set_contrast_scaling(self, v):
-        self.meta.contrast_scaling = v
-
-    def get_artifact_exclusion_window(self):
-        return self.meta.camera_artifact_exclusion_window
-
-    def set_artifact_exclusion_window(self, kind, ind, v):
-        if ind is None:
-            self.meta.camera_artifact_exclusion_window = v
-        if ind in [0, 1]:
-            self.meta.camera_artifact_exclusion_window[ind] = v

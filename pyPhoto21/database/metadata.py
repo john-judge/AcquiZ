@@ -37,7 +37,6 @@ class Metadata:
         # Management and Automation / Workflow Settings
         self.schedule_rli_flag = True
         self.display_value_option_index = 0
-        self.is_analysis_only_mode_enabled = True
         self.is_schedule_rli_enabled = False
         self.is_rli_division_enabled = True
         self.is_data_inverse_enabled = True
