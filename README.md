@@ -1,50 +1,9 @@
-# pyPhoto21
+# PhotoLib / AcquiZ
 
-## Demo Footage
+Acquisition-only, split off from PhotoZ integrated acquisition analysis program. See [PhotoLib repository](https://github.com/john-judge/PhotoLib)
 
-### Region Selector
-https://user-images.githubusercontent.com/40705003/131744469-081272ae-d758-4131-89d2-19b02c2f603b.mp4
+![image](https://user-images.githubusercontent.com/40705003/153938946-45c8a2d8-1e2a-498b-acc6-24f5b5a49e3d.png)
 
-### Contrast Adjustment
-https://user-images.githubusercontent.com/40705003/131744018-c3cf2432-2342-4078-a799-026a484438fa.mp4
-
-### Zoom and Pan
-https://user-images.githubusercontent.com/40705003/131744436-856f514c-c925-4d4a-841e-409c8aa5e47c.mp4
-
-### Time Course Plot
-https://user-images.githubusercontent.com/40705003/131745807-244bd066-618a-48f9-bead-37c1d4015a60.mp4
-
-### DAQ Config
-https://user-images.githubusercontent.com/40705003/131745935-35572211-6eb3-4fcc-9ad3-3cc4491a4d89.mp4
-
-## Live Feed
-![image](https://user-images.githubusercontent.com/40705003/132570244-c1128e61-fd9c-452e-a350-d28eaff47bb4.png)
-
-# PhotoLib
-Builds a camera/electrode management DLL to expose to (Python) applications. Includes a GUI application for acquisition and analysis, written in Python.
-
-## Building Executable
-Uses `pyinstaller`. Navigate to the `PhotoLib` directory.
-
-### One-File Mode
-Not recommended because start-up is slow, but it is simpler. If you want a single exe for analysis only and portability between folders, shared drivers, machine, etc. For one-file mode:
-```
-pyinstaller -F -n pyPhoto21 --add-data nicaiu.dll;. --add-data clseredt.dll;. --add-data ./x64/Release/PhotoLib.dll;./x64/Release/ onefile.py
-```
-
-This will take serveral minutes. 
-
-### Building for Rig Computer (One-Folder Mode)
-Or in one-folder mode (faster startup, but files are messy):
-```
- pyinstaller -n pyPhoto21 --add-data nicaiu.dll;. --add-data clseredt.dll;. driver.py --distpath dist --add-data ./x64/Release/PhotoLib.dll;./x64/Release/
- ```
-
-Avoid using the `--clean --noconfirm` options.
-
-This will take serveral minutes. 
-
-Create a shortcut to the executable in the current directory. Place the shortcut anywhere you like, but do not move any files in the folder in which pyinstaller was run, and do not change the location of the folder either.
 
 ### Distributing This Application
 
